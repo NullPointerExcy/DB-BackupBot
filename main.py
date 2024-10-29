@@ -65,6 +65,8 @@ def save_parsed_args(args):
         configs["ssh"]["username"] = args.ssh_username
     if args.ssh_private_key_path:
         configs["ssh"]["private_key_path"] = args.ssh_private_key_path
+    if args.ssh_server_folder_path:
+        configs["ssh"]["server_folder_path"] = args.ssh_server_folder_path
 
     save_all_configs(configs)
 
@@ -88,6 +90,7 @@ def main():
     parser.add_argument("--ssh_port", help="SSH port for remote backup.")
     parser.add_argument("--ssh_username", help="SSH username for remote backup.")
     parser.add_argument("--ssh_private_key_path", help="Path to the private key for SSH authentication.")
+    parser.add_argument("--ssh_server_folder_path", help="Path to the folder on the server to store the backups.")
 
 
     args = parser.parse_args()
