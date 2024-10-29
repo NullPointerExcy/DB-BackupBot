@@ -1,6 +1,6 @@
 {
     "type": "PostgreSQL",
-    "dbname": "",
+    "dbname": "TP5",
     "user": "postgres",
     "password": "postgres",
     "host": "localhost",

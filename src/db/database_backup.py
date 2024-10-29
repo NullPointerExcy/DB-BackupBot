@@ -59,15 +59,21 @@ def delete_old_backups():
 def send_backup_to_api(dump_path):
     with open(dump_path, 'rb') as f:
         try:
+            headers = {}
+            if API_CONFIG.get('api_key'):
+                headers['Authorization'] = f"Bearer {API_CONFIG['api_key']}"
+
             response = requests.post(
                 API_CONFIG['url'],
-                headers={'Authorization': f"Bearer {API_CONFIG['api_key']}"},
+                headers=headers,
                 files={'file': f}
             )
+
             if response.status_code == 200:
                 print("Backup successfully sent to the API.")
             else:
                 print(f"Error while sending the backup to the API: {response.status_code} - {response.text}")
+
         except Exception as e:
             print(f"API-Connection error: {e}")
 
