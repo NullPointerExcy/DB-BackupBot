@@ -1,0 +1,5 @@
+{
+    "interval_minutes": 1,
+    "backup_path": "",
+    "max_backup_files": 5
+}
