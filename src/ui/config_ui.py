@@ -27,7 +27,7 @@ class ConfigUI(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("DB Auto-Backup-Tool")
+        self.setWindowTitle("DB-BackupBot")
         self.setGeometry(100, 100, 600, 400)
 
         self.db_type_input = QComboBox()
