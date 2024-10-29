@@ -1,0 +1,8 @@
+{
+    "use_ssh": false,
+    "host": "",
+    "port": 22,
+    "username": "",
+    "private_key_path": "",
+    "server_folder_path": ""
+}

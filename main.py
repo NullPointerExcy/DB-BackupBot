@@ -57,6 +57,14 @@ def save_parsed_args(args):
         configs["backup"]["backup_path"] = args.backup_path
     if args.max_backup_files:
         configs["backup"]["max_backup_files"] = int(args.max_backup_files)
+    if args.ssh_host:
+        configs["ssh"]["host"] = args.ssh_host
+    if args.ssh_port:
+        configs["ssh"]["port"] = args.ssh_port
+    if args.ssh_username:
+        configs["ssh"]["username"] = args.ssh_username
+    if args.ssh_private_key_path:
+        configs["ssh"]["private_key_path"] = args.ssh_private_key_path
 
     save_all_configs(configs)
 
@@ -76,6 +84,10 @@ def main():
     parser.add_argument("--db_type", help="Database type. Only 'PostgreSQL' is supported for now.")
     parser.add_argument("--backup_path", help="Path to store the backups.")
     parser.add_argument("--max_backup_files", type=int, help="Maximum number of backup files to keep.")
+    parser.add_argument("--ssh_host", help="SSH host for remote backup.")
+    parser.add_argument("--ssh_port", help="SSH port for remote backup.")
+    parser.add_argument("--ssh_username", help="SSH username for remote backup.")
+    parser.add_argument("--ssh_private_key_path", help="Path to the private key for SSH authentication.")
 
 
     args = parser.parse_args()

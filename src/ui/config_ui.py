@@ -5,7 +5,7 @@ import time
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QFileDialog,
-    QLineEdit, QComboBox, QProgressBar, QSpinBox, QColorDialog, QSlider, QHBoxLayout, QGroupBox
+    QLineEdit, QComboBox, QProgressBar, QSpinBox, QColorDialog, QSlider, QHBoxLayout, QGroupBox, QCheckBox
 )
 from src.configuration.config import load_all_configs, save_all_configs
 from src.db.database_backup import run_backup_service, start_service, stop_service
@@ -27,80 +27,59 @@ class ConfigUI(QWidget):
 
     def init_ui(self):
         self.setWindowTitle("DB Auto-Backup-Tool")
-        self.setGeometry(100, 100, 400, 200)
-        main_layout = QVBoxLayout()
+        self.setGeometry(100, 100, 600, 400)
 
         self.db_type_input = QComboBox()
         self.db_type_input.addItems(db_types)
         self.db_type_input.setCurrentText(self.configs["db"]["type"])
         self.db_type_input.currentTextChanged.connect(self.db_type_changed)
-
         self.interval_input = QSpinBox()
         self.interval_input.setValue(self.configs["backup"]["interval_minutes"])
         self.interval_input.valueChanged.connect(self.interval_changed)
-
         self.backup_path_input = QLineEdit(self.configs["backup"]["backup_path"])
         self.backup_path_button = QPushButton("Select Backup Path")
         self.backup_path_button.clicked.connect(self.select_backup_path)
-
-        self.browse_backup_path = QPushButton("Browse")
+        self.browse_backup_path = QPushButton("Select Backup Path")
         self.browse_backup_path.clicked.connect(self.select_backup_path)
-
-        backup_group = QGroupBox("Backup Configuration")
-        backup_layout = QVBoxLayout()
-        backup_layout.addWidget(QLabel("Backup Interval (minutes)"))
-        backup_layout.addWidget(self.interval_input)
-        backup_layout.addWidget(QLabel("Max Backups to Keep"))
         self.max_backups_input = QSpinBox()
         self.max_backups_input.setValue(self.configs["backup"]["max_backup_files"])
         self.max_backups_input.textChanged.connect(self.max_backups_changed)
-        backup_layout.addWidget(self.max_backups_input)
-        backup_layout.addWidget(QLabel("Backup Path"))
-        backup_layout.addWidget(self.backup_path_input)
-        backup_layout.addWidget(self.browse_backup_path)
-        backup_group.setLayout(backup_layout)
-        # username, password, host, port, dbname
-        db_group = QGroupBox("Database Configuration")
-        db_layout = QVBoxLayout()
-        db_layout.addWidget(QLabel("Database Type"))
-        db_layout.addWidget(self.db_type_input)
-        db_layout.addWidget(QLabel("DB User"))
         self.db_user_input = QLineEdit(self.configs["db"]["user"])
         self.db_user_input.textChanged.connect(self.db_username_changed)
-        db_layout.addWidget(self.db_user_input)
-        db_layout.addWidget(QLabel("Password"))
         self.db_password_input = QLineEdit(self.configs["db"]["password"])
         self.db_password_input.textChanged.connect(self.db_password_changed)
-        db_layout.addWidget(self.db_password_input)
-        db_layout.addWidget(QLabel("Host"))
         self.db_host_input = QLineEdit(self.configs["db"]["host"])
         self.db_host_input.textChanged.connect(self.db_host_changed)
-        db_layout.addWidget(self.db_host_input)
-        db_layout.addWidget(QLabel("Port"))
         self.db_port_input = QLineEdit(self.configs["db"]["port"])
         self.db_port_input.textChanged.connect(self.db_port_changed)
-        db_layout.addWidget(self.db_port_input)
-        db_layout.addWidget(QLabel("Database Name"))
         self.db_name_input = QLineEdit(self.configs["db"]["dbname"])
         self.db_name_input.textChanged.connect(self.db_name_changed)
-        db_layout.addWidget(self.db_name_input)
-        db_group.setLayout(db_layout)
 
-        api_group = QGroupBox("API Configuration")
-        api_layout = QVBoxLayout()
+        self.api_checkbox = QCheckBox("Use API")
+        self.api_checkbox.stateChanged.connect(self.use_api_changed)
         self.api_url_input = QLineEdit(self.configs["api"]["url"])
         self.api_url_input.textChanged.connect(self.api_url_changed)
         self.api_token_input = QLineEdit(self.configs["api"]["api_key"])
         self.api_token_input.textChanged.connect(self.api_token_changed)
 
-        api_layout.addWidget(QLabel("API URL"))
-        api_layout.addWidget(self.api_url_input)
-        api_layout.addWidget(QLabel("API Token"))
-        api_layout.addWidget(self.api_token_input)
-        api_group.setLayout(api_layout)
-
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
+
+        self.ssh_checkbox = QCheckBox("Use SSH")
+        self.ssh_checkbox.setChecked(self.configs["ssh"]["use_ssh"])
+        self.ssh_checkbox.stateChanged.connect(self.use_ssh_changed)
+        self.ssh_host_input = QLineEdit(self.configs["ssh"]["host"])
+        self.ssh_host_input.textChanged.connect(self.ssh_host_changed)
+        self.ssh_port_input = QLineEdit(str(self.configs["ssh"]["port"]))
+        self.ssh_port_input.textChanged.connect(self.ssh_port_changed)
+        self.ssh_user_input = QLineEdit(self.configs["ssh"]["username"])
+        self.ssh_user_input.textChanged.connect(self.ssh_user_changed)
+        self.ssh_key_input = QLineEdit(self.configs["ssh"]["private_key_path"])
+        self.ssh_key_input.textChanged.connect(self.ssh_key_changed)
+        self.ssh_key_button = QPushButton("Select Private Key")
+        self.ssh_key_button.clicked.connect(self.select_ssh_key)
+        self.ssh_server_save_path = QLineEdit(self.configs["ssh"]["server_folder_path"])
+        self.ssh_server_save_path.textChanged.connect(self.change_ssh_server_save_path)
 
         self.start_button = QPushButton("Start Backup Service")
         self.start_button.clicked.connect(self.toggle_service)
@@ -110,10 +89,97 @@ class ConfigUI(QWidget):
         self.api_url_input.move(20, 60)
         self.start_button.move(20, 100)
 
+        backup_group = QGroupBox("Backup Configuration")
+        backup_layout = QVBoxLayout()
+
+        # Horizontal layout for labels and input fields
+        backup_inputs_layout = QHBoxLayout()
+        backup_inputs_layout.addWidget(QLabel("Backup Interval (minutes)"))
+        backup_inputs_layout.addWidget(self.interval_input)
+        backup_inputs_layout.addWidget(QLabel("Max Backups to Keep"))
+        backup_inputs_layout.addWidget(self.max_backups_input)
+        backup_inputs_layout.addWidget(QLabel("Backup Path"))
+        backup_inputs_layout.addWidget(self.backup_path_input)
+
+        # Vertical layout for "Browse" button
+        backup_buttons_layout = QVBoxLayout()
+        backup_buttons_layout.addWidget(self.browse_backup_path)
+
+        # Add horizontal inputs and vertical buttons to the main backup layout
+        backup_layout.addLayout(backup_inputs_layout)
+        backup_layout.addLayout(backup_buttons_layout)
+        backup_group.setLayout(backup_layout)
+
+        # Database Configuration Section
+        db_group = QGroupBox("Database Configuration")
+        db_layout = QVBoxLayout()
+
+        # Horizontal layout for database labels and inputs
+        db_inputs_layout = QHBoxLayout()
+        db_inputs_layout.addWidget(QLabel("Database Type"))
+        db_inputs_layout.addWidget(self.db_type_input)
+        db_inputs_layout.addWidget(QLabel("DB User"))
+        db_inputs_layout.addWidget(self.db_user_input)
+        db_inputs_layout.addWidget(QLabel("Password"))
+        db_inputs_layout.addWidget(self.db_password_input)
+        db_inputs_layout.addWidget(QLabel("Host"))
+        db_inputs_layout.addWidget(self.db_host_input)
+        db_inputs_layout.addWidget(QLabel("Port"))
+        db_inputs_layout.addWidget(self.db_port_input)
+        db_inputs_layout.addWidget(QLabel("Database Name"))
+        db_inputs_layout.addWidget(self.db_name_input)
+
+        # Add the horizontal inputs layout to the database configuration
+        db_layout.addLayout(db_inputs_layout)
+        db_group.setLayout(db_layout)
+
+        # API Configuration Section
+        api_group = QGroupBox("API Configuration")
+        api_layout = QVBoxLayout()
+        api_layout.addWidget(self.api_checkbox)
+
+        # Horizontal layout for API inputs
+        api_inputs_layout = QHBoxLayout()
+        api_inputs_layout.addWidget(QLabel("API URL"))
+        api_inputs_layout.addWidget(self.api_url_input)
+        api_inputs_layout.addWidget(QLabel("API Token"))
+        api_inputs_layout.addWidget(self.api_token_input)
+        api_layout.addLayout(api_inputs_layout)
+        api_group.setLayout(api_layout)
+
+        # SSH Configuration Section with horizontal layout for inputs and button below
+        ssh_group = QGroupBox("SSH Configuration")
+        ssh_layout = QVBoxLayout()
+        ssh_layout.addWidget(self.ssh_checkbox)
+
+        # Horizontal layout for SSH inputs
+        ssh_inputs_layout = QHBoxLayout()
+        ssh_inputs_layout.addWidget(QLabel("SSH Host"))
+        ssh_inputs_layout.addWidget(self.ssh_host_input)
+        ssh_inputs_layout.addWidget(QLabel("SSH Port"))
+        ssh_inputs_layout.addWidget(self.ssh_port_input)
+        ssh_inputs_layout.addWidget(QLabel("SSH User"))
+        ssh_inputs_layout.addWidget(self.ssh_user_input)
+        ssh_inputs_layout.addWidget(QLabel("SSH Private Key Path"))
+        ssh_inputs_layout.addWidget(self.ssh_key_input)
+
+        # Vertical layout for "Select Private Key" button
+        ssh_buttons_layout = QVBoxLayout()
+        ssh_buttons_layout.addWidget(self.ssh_key_button)
+        ssh_buttons_layout.addWidget(QLabel("Server Save Path"))
+        ssh_buttons_layout.addWidget(self.ssh_server_save_path)
+
+        # Add horizontal inputs and vertical button to the main SSH layout
+        ssh_layout.addLayout(ssh_inputs_layout)
+        ssh_layout.addLayout(ssh_buttons_layout)
+        ssh_group.setLayout(ssh_layout)
+
+        # Main Layout
+        main_layout = QVBoxLayout()
         main_layout.addWidget(db_group)
         main_layout.addWidget(backup_group)
         main_layout.addWidget(api_group)
-
+        main_layout.addWidget(ssh_group)
         main_layout.addWidget(self.progress_bar)
         main_layout.addWidget(self.start_button)
 
@@ -130,6 +196,49 @@ class ConfigUI(QWidget):
             self.configs["backup"]["interval_minutes"],
             self.configs["backup"]["backup_path"]
         ])
+
+    def use_ssh_changed(self, state):
+        # state is 2 when checked, 0 when unchecked
+        self.configs["ssh"]["use_ssh"] = state == 2
+        save_all_configs(self.configs)
+        self.update_start_button_state()
+
+    def use_api_changed(self, state):
+        self.configs["api"]["use_api"] = state == 2
+        save_all_configs(self.configs)
+        self.update_start_button_state()
+
+    def ssh_host_changed(self, text):
+        self.configs["ssh"]["host"] = text
+        save_all_configs(self.configs)
+        self.update_start_button_state()
+
+    def ssh_port_changed(self, value):
+        self.configs["ssh"]["port"] = int(value)
+        save_all_configs(self.configs)
+        self.update_start_button_state()
+
+    def ssh_user_changed(self, text):
+        self.configs["ssh"]["user"] = text
+        save_all_configs(self.configs)
+        self.update_start_button_state()
+
+    def ssh_key_changed(self, text):
+        self.configs["ssh"]["private_key_path"] = text
+        save_all_configs(self.configs)
+        self.update_start_button_state()
+
+    def select_ssh_key(self):
+        path = QFileDialog.getOpenFileName(self, "Select SSH Private Key")[0]
+        self.ssh_key_input.setText(path)
+        self.configs["ssh"]["private_key_path"] = path
+        save_all_configs(self.configs)
+        self.update_start_button_state()
+
+    def change_ssh_server_save_path(self, text):
+        self.configs["ssh"]["server_folder_path"] = text
+        save_all_configs(self.configs)
+        self.update_start_button_state()
 
     def max_backups_changed(self, value):
         self.configs["backup"]["max_backup_files"] = int(value)
@@ -242,8 +351,7 @@ class ConfigUI(QWidget):
         event.accept()
 
     def run_backup_service_ui(self):
-        send_to_api: bool = self.api_url_input.text() and self.api_token_input.text()
-        run_backup_service(send_to_api=send_to_api)
+        run_backup_service(send_to_api=self.configs["api"]["use_api"], send_to_server=self.configs["ssh"]["use_ssh"])
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 {
-    "interval_minutes": 1,
-    "backup_path": "D:\\Downloads\\DBBackupTest",
+    "interval_minutes": 60,
+    "backup_path": "./backups",
     "max_backup_files": 5
 }

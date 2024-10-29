@@ -20,10 +20,12 @@ def load_all_configs():
     db_config = load_config('db_config.json')
     backup_config = load_config('backup_config.json')
     api_config = load_config('api_config.json')
-    return {"db": db_config, "backup": backup_config, "api": api_config}
+    ssh_config = load_config('ssh_config.json')
+    return {"db": db_config, "backup": backup_config, "api": api_config, "ssh": ssh_config}
 
 
 def save_all_configs(configs):
     save_config('db_config.json', configs['db'])
     save_config('backup_config.json', configs['backup'])
     save_config('api_config.json', configs['api'])
+    save_config('ssh_config.json', configs['ssh'])
