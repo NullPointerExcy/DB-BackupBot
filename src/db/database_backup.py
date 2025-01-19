@@ -1,5 +1,4 @@
-import os
-from typing import Dict
+from typing import Dict, Tuple
 
 import schedule
 import time
@@ -11,6 +10,7 @@ from datetime import datetime
 from src.configuration.config import load_all_configs
 
 configs = load_all_configs()
+
 DB_CONFIG = configs["db"]
 BACKUP_CONFIG = configs["backup"]
 API_CONFIG = configs["api"]
@@ -19,9 +19,77 @@ SSH_CONFIG = configs["ssh"]
 service_running = True
 
 
+def get_dump_command(dump_path: str) -> Tuple:
+    """
+    Returns the command to dump the database based on the database type.
+    :param dump_path: Database (e.g. 'postgresql', 'mysql', 'sqlite', 'mssql' or 'oracle')
+    :return: Tuple of dump command and environment variables.
+    """
+    extra_options = DB_CONFIG.get("extra_options", "").split()
+
+    match DB_CONFIG["type"].casefold():
+        case 'postgresql':
+            dump_command = [
+                               "pg_dump",
+                               "-h", DB_CONFIG["host"],
+                               "-p", str(DB_CONFIG["port"]),
+                               "-U", DB_CONFIG["user"],
+                               "-F", "c",
+                               "-d", DB_CONFIG["dbname"],
+                               "-f", dump_path
+                           ] + extra_options
+            env = os.environ.copy()
+            env["PGPASSWORD"] = DB_CONFIG["password"]
+        case 'mysql':
+            dump_command = [
+                               "mysqldump",
+                               "-h", DB_CONFIG["host"],
+                               "-P", str(DB_CONFIG["port"]),
+                               "-u", DB_CONFIG["user"],
+                               f"--password={DB_CONFIG['password']}",
+                               DB_CONFIG["dbname"],
+                               f"--result-file={dump_path}"
+                           ] + extra_options
+            env = None
+        case 'sqlite':
+            dump_command = [
+                               "sqlite3",
+                               DB_CONFIG["dbname"],
+                               f".backup {dump_path}"
+                           ] + extra_options
+            env = None
+        case 'mssql':
+            dump_command = [
+                               "sqlcmd",
+                               "-S", f"{DB_CONFIG['host']},{DB_CONFIG['port']}",
+                               "-U", DB_CONFIG["user"],
+                               "-P", DB_CONFIG["password"],
+                               "-Q", f"BACKUP DATABASE [{DB_CONFIG['dbname']}] TO DISK = '{dump_path}'"
+                           ] + extra_options
+            env = None
+
+        case 'oracle':
+            dump_command = [
+                               "expdp",
+                               f"{DB_CONFIG['user']}/{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['service_name']}",
+                               f"directory=DATA_PUMP_DIR",
+                               f"dumpfile={os.path.basename(dump_path)}",
+                               f"schemas={DB_CONFIG['schema']}"
+                           ] + extra_options
+            env = os.environ.copy()
+
+            # Oracle's Data Pump Export requires environment variables for configuration, if needed.
+            env["ORACLE_HOME"] = DB_CONFIG.get("home", "")
+            env["PATH"] = f"{env['ORACLE_HOME']}/bin:" + env.get("PATH", "")
+        case _:
+            raise ValueError(f"Unsupported database type: {DB_CONFIG['type']}")
+
+    return dump_command, env
+
+
 def create_db_dump():
     """
-    Creates a backup of the database using pg_dump.
+    This function creates a backup of the database.
     :return:
     """
     dump_path = os.path.join(
@@ -30,21 +98,10 @@ def create_db_dump():
     )
     delete_old_backups()
 
-    pg_dump_command = [
-        "pg_dump",
-        "-h", DB_CONFIG["host"],
-        "-p", str(DB_CONFIG["port"]),
-        "-U", DB_CONFIG["user"],
-        "-F", "c",
-        "-d", DB_CONFIG["dbname"],
-        "-f", dump_path
-    ]
+    _dump_command, _env = get_dump_command(dump_path)
 
     try:
-        env = os.environ.copy()
-        env["PGPASSWORD"] = DB_CONFIG["password"]
-
-        subprocess.run(pg_dump_command, env=env, check=True)
+        subprocess.run(_dump_command, env=_env, check=True)
         print(f"Successfully created backup: {dump_path}")
     except subprocess.CalledProcessError as e:
         print(f"Error while creating backup: {e}")
@@ -139,12 +196,15 @@ def save_backup_to_server(dump_path: str):
         ssh.close()
 
 
-def scheduled_backup(send_to_api=False, send_to_server=False):
+def scheduled_backup(send_to_api=False, send_to_server=False, use_local_backup=False):
     dump_path = create_db_dump()
     if send_to_api:
         send_backup_to_api(dump_path)
     if send_to_server:
         save_backup_to_server(dump_path)
+
+    if not use_local_backup:
+        os.remove(dump_path)
 
 
 def start_service():
@@ -157,7 +217,8 @@ def stop_service():
     service_running = False
 
 
-def run_backup_service(send_to_api=False, send_to_server=False):
+def run_backup_service(send_to_api=False, send_to_server=False, use_local_backup=False):
+    from croniter import croniter
     global DB_CONFIG, BACKUP_CONFIG, API_CONFIG, SSH_CONFIG, configs, service_running
     configs = load_all_configs()
     DB_CONFIG = configs["db"]
@@ -165,7 +226,28 @@ def run_backup_service(send_to_api=False, send_to_server=False):
     API_CONFIG = configs["api"]
     SSH_CONFIG = configs["ssh"]
 
-    schedule.every(BACKUP_CONFIG["interval_minutes"]).minutes.do(scheduled_backup, send_to_api=send_to_api, send_to_server=send_to_server)
+    if BACKUP_CONFIG["use_cron"]:
+        cron_expression = BACKUP_CONFIG.get("cron_expression", "")
+        if not croniter.is_valid(cron_expression):
+            print("Invalid cron expression! Please check your configuration.")
+            return
+
+        cron_schedule = croniter(cron_expression, datetime.now())
+
+        def cron_task():
+            next_run_time = cron_schedule.get_next(datetime)
+            while service_running:
+                now = datetime.now()
+                if now >= next_run_time:
+                    scheduled_backup(send_to_api=send_to_api, send_to_server=send_to_server, use_local_backup=use_local_backup)
+                    next_run_time = cron_schedule.get_next(datetime)
+                time.sleep(1)
+
+        print(f"Starting backup service with cron expression: {cron_expression}")
+        cron_task()
+    else:
+        schedule.every(BACKUP_CONFIG["interval_minutes"]).minutes.do(scheduled_backup, send_to_api=send_to_api,
+                                                                     send_to_server=send_to_server, use_local_backup=use_local_backup)
 
     print(f"Starting scheduled backups every {BACKUP_CONFIG['interval_minutes']} minutes.")
     while service_running:
