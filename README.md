@@ -1,5 +1,7 @@
 ﻿# DB-BackupBot
 
+[![Download Latest Release](https://img.shields.io/github/v/release/NullPointerExcy/DB-BackupBot)](https://github.com/NullPointerExcy/DB-BackupBot/releases/latest)
+
 A Python tool for automated database backups with optional cloud API integration and also supports remote backups via SSH.
 > Don't forget to add environment variables if needed.
 ## Usage
