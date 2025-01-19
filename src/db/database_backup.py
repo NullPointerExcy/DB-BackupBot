@@ -196,12 +196,15 @@ def save_backup_to_server(dump_path: str):
         ssh.close()
 
 
-def scheduled_backup(send_to_api=False, send_to_server=False):
+def scheduled_backup(send_to_api=False, send_to_server=False, use_local_backup=False):
     dump_path = create_db_dump()
     if send_to_api:
         send_backup_to_api(dump_path)
     if send_to_server:
         save_backup_to_server(dump_path)
+
+    if not use_local_backup:
+        os.remove(dump_path)
 
 
 def start_service():
@@ -214,7 +217,7 @@ def stop_service():
     service_running = False
 
 
-def run_backup_service(send_to_api=False, send_to_server=False):
+def run_backup_service(send_to_api=False, send_to_server=False, use_local_backup=False):
     from croniter import croniter
     global DB_CONFIG, BACKUP_CONFIG, API_CONFIG, SSH_CONFIG, configs, service_running
     configs = load_all_configs()
@@ -236,7 +239,7 @@ def run_backup_service(send_to_api=False, send_to_server=False):
             while service_running:
                 now = datetime.now()
                 if now >= next_run_time:
-                    scheduled_backup(send_to_api=send_to_api, send_to_server=send_to_server)
+                    scheduled_backup(send_to_api=send_to_api, send_to_server=send_to_server, use_local_backup=use_local_backup)
                     next_run_time = cron_schedule.get_next(datetime)
                 time.sleep(1)
 
@@ -244,7 +247,7 @@ def run_backup_service(send_to_api=False, send_to_server=False):
         cron_task()
     else:
         schedule.every(BACKUP_CONFIG["interval_minutes"]).minutes.do(scheduled_backup, send_to_api=send_to_api,
-                                                                     send_to_server=send_to_server)
+                                                                     send_to_server=send_to_server, use_local_backup=use_local_backup)
 
     print(f"Starting scheduled backups every {BACKUP_CONFIG['interval_minutes']} minutes.")
     while service_running:

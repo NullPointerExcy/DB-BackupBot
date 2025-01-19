@@ -1,7 +1,7 @@
 {
     "use_local_backup": false,
     "interval_minutes": 60,
-    "backup_path": "",
+    "backup_path": "C:",
     "max_backup_files": 5,
     "cron_expression": "* * * * *",
     "use_cron": false

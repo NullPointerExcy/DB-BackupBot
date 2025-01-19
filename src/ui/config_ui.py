@@ -312,13 +312,16 @@ class ConfigUI(QWidget):
         self.db_schema_input.setToolTip("Specify the database schema (required for PostgreSQL and Oracle).")
         self.db_home_input.setToolTip("Path to the database installation (required for Oracle).")
         self.db_extra_options_input.setToolTip("Additional options for the backup command (e.g., '--no-owner').")
-        # if a backup path is not given, add a tooltip to the start button
+
         if not self.configs["backup"]["backup_path"]:
             self.start_button.setToolTip("Please select a backup path.")
         else:
             self.start_button.setToolTip("")
+
         self.backup_path_input.setToolTip("Path to store the backups.")
         self.backup_path_valid_label.setToolTip("Can be ignored, if local backup is not used.")
+
+
 
     def use_local_backup_changed(self, state):
         # Because Qt is strange...
@@ -611,21 +614,16 @@ class ConfigUI(QWidget):
         event.accept()
 
     def run_backup_service_ui(self):
-        run_backup_service(send_to_api=self.configs["api"]["use_api"], send_to_server=self.configs["ssh"]["use_ssh"])
+        run_backup_service(send_to_api=self.configs["api"]["use_api"], send_to_server=self.configs["ssh"]["use_ssh"], use_local_backup=self.configs["backup"]["use_local_backup"])
 
 
 if __name__ == '__main__':
-    # get the arguments from the command line (--dark_mode)
-    arguements = sys.argv
-    if "--dark_mode" in arguements:
-        dark_mode = True
-    else:
-        dark_mode = False
-
     app = QApplication([])
     app.setStyle("Fusion")
-    if dark_mode:
-        set_dark_mode(app)
+
+    arguements = sys.argv
+    set_dark_mode(app) if "--dark_mode" in arguements else None
+
     window = ConfigUI()
     window.show()
     sys.exit(app.exec())
