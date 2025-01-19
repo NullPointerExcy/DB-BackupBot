@@ -1,4 +1,5 @@
 {
+    "use_local_backup": false,
     "interval_minutes": 60,
     "backup_path": "",
     "max_backup_files": 5,

@@ -1,6 +1,9 @@
 import os
 import sys
 import threading
+
+from src.ui.style import set_dark_mode
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from PyQt5.QtCore import QTimer
@@ -70,7 +73,12 @@ class ConfigUI(QWidget):
 
         self.cron_result = QLabel("")
 
+        self.use_local_backup = QCheckBox("Use Local Backup")
+        self.use_local_backup.setChecked(self.configs["backup"]["use_local_backup"])
+        self.use_local_backup.stateChanged.connect(self.use_local_backup_changed)
         self.backup_path_input = QLineEdit(self.configs["backup"]["backup_path"])
+        self.backup_path_input.textChanged.connect(self.backup_path_changed)
+        self.backup_path_valid_label = QLabel("")
         self.backup_path_button = QPushButton("Select Backup Path")
         self.backup_path_button.clicked.connect(self.select_backup_path)
         self.browse_backup_path = QPushButton("Select Backup Path")
@@ -101,6 +109,7 @@ class ConfigUI(QWidget):
         self.db_extra_options_input.textChanged.connect(self.db_extra_options_changed)
 
         self.api_checkbox = QCheckBox("Use API")
+        self.api_checkbox.setChecked(self.configs["api"]["use_api"])
         self.api_checkbox.stateChanged.connect(self.use_api_changed)
         self.api_url_input = QLineEdit(self.configs["api"]["url"])
         self.api_url_input.textChanged.connect(self.api_url_changed)
@@ -143,12 +152,19 @@ class ConfigUI(QWidget):
 
         backup_layout = QVBoxLayout()
 
+        local_backup_layout = QVBoxLayout()
+        local_backup_layout.addWidget(self.use_local_backup)
+        local_backup_layout.addWidget(self.create_horizontal_line())
+
         # Horizontal layout for labels and input fields
         backup_inputs_layout = QHBoxLayout()
         backup_inputs_layout.addWidget(QLabel("Backup Interval (minutes)"))
         backup_inputs_layout.addWidget(self.interval_input)
         backup_inputs_layout.addWidget(QLabel("Max Backups to Keep"))
         backup_inputs_layout.addWidget(self.max_backups_input)
+
+        backup_inputs_layout.addWidget(self.backup_path_valid_label)
+
         backup_inputs_layout.addWidget(QLabel("Backup Path"))
         backup_inputs_layout.addWidget(self.backup_path_input)
 
@@ -157,6 +173,7 @@ class ConfigUI(QWidget):
         backup_buttons_layout.addWidget(self.browse_backup_path)
 
         # Add horizontal inputs and vertical buttons to the main backup layout
+        backup_layout.addLayout(local_backup_layout)
         backup_layout.addLayout(backup_inputs_layout)
         backup_layout.addLayout(backup_buttons_layout)
 
@@ -273,11 +290,15 @@ class ConfigUI(QWidget):
 
         self.add_tooltips()
 
+        self.use_local_backup_changed(self.configs["backup"]["use_local_backup"])
         self.use_ssh_changed(self.configs["ssh"]["use_ssh"])
         self.use_api_changed(self.configs["api"]["use_api"])
         self.db_type_changed(self.configs["db"]["type"])
+
         self.use_cron_changed(self.configs["backup"]["use_cron"])
         self.cron_expression_changed(self.configs["backup"].get("cron_expression", ""))
+
+        self.backup_path_changed(self.configs["backup"]["backup_path"])
 
         self.setLayout(main_layout)
 
@@ -291,20 +312,42 @@ class ConfigUI(QWidget):
         self.db_schema_input.setToolTip("Specify the database schema (required for PostgreSQL and Oracle).")
         self.db_home_input.setToolTip("Path to the database installation (required for Oracle).")
         self.db_extra_options_input.setToolTip("Additional options for the backup command (e.g., '--no-owner').")
+        # if a backup path is not given, add a tooltip to the start button
+        if not self.configs["backup"]["backup_path"]:
+            self.start_button.setToolTip("Please select a backup path.")
+        else:
+            self.start_button.setToolTip("")
+        self.backup_path_input.setToolTip("Path to store the backups.")
+        self.backup_path_valid_label.setToolTip("Can be ignored, if local backup is not used.")
+
+    def use_local_backup_changed(self, state):
+        # Because Qt is strange...
+        is_checked = bool(state) if isinstance(state, bool) else state == 2
+        self.configs["backup"]["use_local_backup"] = is_checked
+        save_all_configs(self.configs)
+
+        # Disable the backup path input field if local backup is not used
+        self.backup_path_input.setEnabled(is_checked)
+        self.backup_path_button.setEnabled(is_checked)
+        self.browse_backup_path.setEnabled(is_checked)
+
+        self.update_start_button_state()
 
     def use_cron_changed(self, state):
-        self.configs["backup"]["use_cron"] = state == 2
+        # Because Qt is strange...
+        is_checked = bool(state) if isinstance(state, bool) else state == 2
+        self.configs["backup"]["use_cron"] = is_checked
         save_all_configs(self.configs)
         self.update_start_button_state()
 
         # Disable the cron input field if cron is not used
-        self.cron_input_0.setEnabled(state == 2)
-        self.cron_input_1.setEnabled(state == 2)
-        self.cron_input_2.setEnabled(state == 2)
-        self.cron_input_3.setEnabled(state == 2)
-        self.cron_input_4.setEnabled(state == 2)
+        self.cron_input_0.setEnabled(is_checked)
+        self.cron_input_1.setEnabled(is_checked)
+        self.cron_input_2.setEnabled(is_checked)
+        self.cron_input_3.setEnabled(is_checked)
+        self.cron_input_4.setEnabled(is_checked)
         # Disable the interval input field if cron is used
-        self.interval_input.setEnabled(state == 0)
+        self.interval_input.setEnabled(not is_checked)
 
     def cron_expression_changed(self, text):
         from croniter import croniter
@@ -350,9 +393,15 @@ class ConfigUI(QWidget):
             self.configs["db"]["host"],
             self.configs["db"]["port"],
             self.configs["db"]["dbname"],
-            self.configs["backup"]["interval_minutes"],
-            self.configs["backup"]["backup_path"]
         ]
+
+        if self.configs["backup"]["use_cron"]:
+            required_fields.append(self.configs["backup"].get("cron_expression", ""))
+        else:
+            required_fields.append(self.configs["backup"]["interval_minutes"])
+
+        if self.configs["backup"]["use_local_backup"]:
+            required_fields.append(self.configs["backup"]["backup_path"])
 
         if self.configs["db"]["type"].lower() in ["postgresql", "oracle"]:
             required_fields.append(self.configs["db"].get("schema", ""))
@@ -367,27 +416,30 @@ class ConfigUI(QWidget):
         return all(required_fields)
 
     def use_ssh_changed(self, state):
-        # state is 2 when checked, 0 when unchecked
-        self.configs["ssh"]["use_ssh"] = state == 2
+        # Because Qt is strange...
+        is_checked = bool(state) if isinstance(state, bool) else state == 2
+        self.configs["ssh"]["use_ssh"] = is_checked
         save_all_configs(self.configs)
         self.update_start_button_state()
 
         # Disable SSH Port, SSH User, SSH Private Key Path, and Server Save Path if SSH is not used
-        self.ssh_host_input.setEnabled(state == 2)
-        self.ssh_port_input.setEnabled(state == 2)
-        self.ssh_user_input.setEnabled(state == 2)
-        self.ssh_key_input.setEnabled(state == 2)
-        self.ssh_key_button.setEnabled(state == 2)
-        self.ssh_server_save_path.setEnabled(state == 2)
+        self.ssh_host_input.setEnabled(is_checked)
+        self.ssh_port_input.setEnabled(is_checked)
+        self.ssh_user_input.setEnabled(is_checked)
+        self.ssh_key_input.setEnabled(is_checked)
+        self.ssh_key_button.setEnabled(is_checked)
+        self.ssh_server_save_path.setEnabled(is_checked)
 
     def use_api_changed(self, state):
-        self.configs["api"]["use_api"] = state == 2
+        # Because Qt is strange...
+        is_checked = bool(state) if isinstance(state, bool) else state == 2
+        self.configs["api"]["use_api"] = is_checked
         save_all_configs(self.configs)
         self.update_start_button_state()
 
         # Disable API URL and API Token inputs if the API is not used
-        self.api_url_input.setEnabled(state == 2)
-        self.api_token_input.setEnabled(state == 2)
+        self.api_url_input.setEnabled(is_checked)
+        self.api_token_input.setEnabled(is_checked)
 
     def ssh_host_changed(self, text):
         self.configs["ssh"]["host"] = text
@@ -524,6 +576,21 @@ class ConfigUI(QWidget):
             self.backup_thread = None
         print("Backup service stopped.")
 
+    def backup_path_changed(self, text):
+        self.configs["backup"]["backup_path"] = text
+        save_all_configs(self.configs)
+        valid_path = self.validate_path(text)
+        if valid_path:
+            self.backup_path_valid_label.setText("Valid Path")
+            self.backup_path_valid_label.setStyleSheet("QLabel { color : green }")
+        else:
+            self.backup_path_valid_label.setText("Invalid Path")
+            self.backup_path_valid_label.setStyleSheet("QLabel { color : red }")
+        self.update_start_button_state()
+
+    def validate_path(self, path) -> bool:
+        return os.path.exists(path)
+
     def select_backup_path(self):
         path = QFileDialog.getExistingDirectory(self, "Select Backup Path")
         self.backup_path_input.setText(path)
@@ -548,8 +615,17 @@ class ConfigUI(QWidget):
 
 
 if __name__ == '__main__':
+    # get the arguments from the command line (--dark_mode)
+    arguements = sys.argv
+    if "--dark_mode" in arguements:
+        dark_mode = True
+    else:
+        dark_mode = False
+
     app = QApplication([])
     app.setStyle("Fusion")
+    if dark_mode:
+        set_dark_mode(app)
     window = ConfigUI()
     window.show()
     sys.exit(app.exec())
